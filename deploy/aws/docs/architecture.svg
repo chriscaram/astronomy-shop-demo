@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1720" height="1280" viewBox="0 0 1720 1280" font-family="Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#FFFFFF"/><defs>
+<marker id="m545B64" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#545B64"/></marker>
+<marker id="mED7100" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ED7100"/></marker>
+<marker id="mE7157B" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#E7157B"/></marker>
+<marker id="m232F3E" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#232F3E"/></marker>
+<marker id="m8C4FFF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8C4FFF"/></marker>
+<marker id="m7AA116" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7AA116"/></marker>
+<marker id="mDD344C" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#DD344C"/></marker>
+</defs>
+<text x="20" y="44" font-size="22" font-weight="bold" fill="#232F3E">Astronomy Shop on AWS</text>
+<text x="20" y="69" font-size="13" fill="#545B64">OpenTelemetry demo · one environment per AWS account · deploy/aws</text>
+<rect x="170" y="190" width="1520" height="940" rx="4" fill="none" stroke="#232F3E" stroke-width="1.5"/>
+<text x="182" y="210" font-size="12.5" font-weight="bold" fill="#232F3E">AWS Cloud (one account per environment)</text>
+<rect x="200" y="240" width="310" height="770" rx="4" fill="none" stroke="#879196" stroke-width="1.5" stroke-dasharray="6,4"/>
+<text x="212" y="260" font-size="12.5" font-weight="bold" fill="#879196">CloudFront edge (global)</text>
+<rect x="550" y="220" width="1120" height="890" rx="4" fill="none" stroke="#00A4A6" stroke-width="1.5" stroke-dasharray="6,4"/>
+<text x="562" y="240" font-size="12.5" font-weight="bold" fill="#00A4A6">Region us-east-1</text>
+<rect x="580" y="270" width="780" height="560" rx="4" fill="none" stroke="#8C4FFF" stroke-width="1.5"/>
+<text x="592" y="290" font-size="12.5" font-weight="bold" fill="#545B64">VPC (per env)</text>
+<rect x="610" y="330" width="180" height="190" rx="4" fill="#F2F6E8" stroke="#7AA116" stroke-width="1.5"/>
+<text x="622" y="350" font-size="12.5" font-weight="bold" fill="#7AA116">Public subnet</text>
+<rect x="820" y="300" width="510" height="500" rx="4" fill="#E6F6F7" stroke="#00A4A6" stroke-width="1.5"/>
+<text x="832" y="320" font-size="12.5" font-weight="bold" fill="#00A4A6">Private subnets (2 AZ)</text>
+<rect x="960" y="330" width="350" height="450" rx="4" fill="#FFFFFF" stroke="#ED7100" stroke-width="1.5"/>
+<text x="972" y="350" font-size="12.5" font-weight="bold" fill="#ED7100">EC2 instance · Docker Compose</text>
+<polyline points="124,532 323,532" fill="none" stroke="#232F3E" stroke-width="1.6" marker-end="url(#m232F3E)"/>
+<polyline points="124,752 224,752 224,548 323,548" fill="none" stroke="#232F3E" stroke-width="1.6" marker-end="url(#m232F3E)"/>
+<polyline points="355,500 355,356" fill="none" stroke="#8C4FFF" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#m8C4FFF)"/>
+<polyline points="355,564 355,900" fill="none" stroke="#8C4FFF" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#m8C4FFF)"/>
+<polyline points="387,932 660,932" fill="none" stroke="#DD344C" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#mDD344C)"/>
+<polyline points="387,532 850,532" fill="none" stroke="#8C4FFF" stroke-width="1.6" marker-end="url(#m8C4FFF)"/>
+<polyline points="914,532 1055,532" fill="none" stroke="#8C4FFF" stroke-width="1.6" marker-end="url(#m8C4FFF)"/>
+<polyline points="1290,662 1328,662" fill="none" stroke="#7AA116" stroke-width="1.6" marker-end="url(#m7AA116)"/>
+<polyline points="1392,662 1530,662" fill="none" stroke="#7AA116" stroke-width="1.6" marker-end="url(#m7AA116)"/>
+<polyline points="1172,679 1172,720" fill="none" stroke="#ED7100" stroke-width="1.6" marker-end="url(#mED7100)"/>
+<polyline points="1310,380 1420,380 1420,332 1530,332" fill="none" stroke="#E7157B" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#mE7157B)"/>
+<polyline points="980,404 882,404 882,422 784,422" fill="none" stroke="#545B64" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#m545B64)"/>
+<polyline points="752,390 752,302" fill="none" stroke="#545B64" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#m545B64)"/>
+<polyline points="752,238 752,195 780,195 780,152" fill="none" stroke="#545B64" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#m545B64)"/>
+<polyline points="124,1022 1103,1022" fill="none" stroke="#E7157B" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#mE7157B)"/>
+<polyline points="1135,990 1135,885 1114,885 1114,780" fill="none" stroke="#E7157B" stroke-width="1.6" stroke-dasharray="6,4" marker-end="url(#mE7157B)"/>
+<rect x="600" y="96" width="300" height="56" rx="5" fill="#F5F5F5" stroke="#879196"/>
+<text x="750.0" y="121.0" font-size="11.5" text-anchor="middle" font-weight="bold" fill="#232F3E">Internet</text>
+<text x="750.0" y="135.0" font-size="11.5" text-anchor="middle" fill="#232F3E">GitHub (your fork) · ghcr.io images</text>
+<rect x="60" y="500" width="64" height="64" rx="6" fill="#232F3D"/>
+<text x="92.0" y="536.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">Users</text>
+<text x="92.0" y="580" font-size="11.5" text-anchor="middle" fill="#232F3E">Shoppers</text>
+<text x="92.0" y="594" font-size="11.5" text-anchor="middle" fill="#232F3E">(any device)</text>
+<rect x="60" y="720" width="64" height="64" rx="6" fill="#232F3D"/>
+<text x="92.0" y="756.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">Admin</text>
+<text x="92.0" y="800" font-size="11.5" text-anchor="middle" fill="#232F3E">Admin</text>
+<rect x="60" y="990" width="64" height="64" rx="6" fill="#232F3D"/>
+<text x="92.0" y="1026.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">CLI</text>
+<text x="92.0" y="1070" font-size="11.5" text-anchor="middle" fill="#232F3E">Operator</text>
+<text x="92.0" y="1084" font-size="11.5" text-anchor="middle" fill="#232F3E">(deploy/aws/scripts)</text>
+<rect x="285" y="300" width="140" height="56" rx="5" fill="#F3EDFF" stroke="#8C4FFF"/>
+<text x="355.0" y="325.0" font-size="11.5" text-anchor="middle" font-weight="bold" fill="#232F3E">Block bypasses</text>
+<text x="355.0" y="339.0" font-size="11.5" text-anchor="middle" fill="#232F3E">(CloudFront Function)</text>
+<rect x="323" y="500" width="64" height="64" rx="6" fill="#8C4FFF"/>
+<text x="355.0" y="536.0" font-size="10" font-weight="bold" text-anchor="middle" fill="#FFFFFF">CloudFront</text>
+<text x="355.0" y="580" font-size="11.5" text-anchor="middle" fill="#232F3E">Public HTTPS entry</text>
+<text x="355.0" y="594" font-size="11.5" text-anchor="middle" fill="#232F3E">(CloudFront)</text>
+<rect x="323" y="900" width="64" height="64" rx="6" fill="#ED7100"/>
+<text x="355.0" y="936.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">λ@Edge</text>
+<text x="355.0" y="980" font-size="11.5" text-anchor="middle" fill="#232F3E">Admin login check</text>
+<text x="355.0" y="994" font-size="11.5" text-anchor="middle" fill="#232F3E">(Lambda@Edge)</text>
+<rect x="720" y="238" width="64" height="64" rx="6" fill="#8C4FFF"/>
+<text x="752.0" y="274.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">IGW</text>
+<rect x="720" y="390" width="64" height="64" rx="6" fill="#8C4FFF"/>
+<text x="752.0" y="426.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">NAT</text>
+<text x="752.0" y="470" font-size="11.5" text-anchor="middle" fill="#232F3E">Outbound only</text>
+<text x="752.0" y="484" font-size="11.5" text-anchor="middle" fill="#232F3E">(NAT Gateway)</text>
+<rect x="850" y="500" width="64" height="64" rx="6" fill="#8C4FFF"/>
+<text x="882.0" y="536.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">ALB</text>
+<text x="882.0" y="580" font-size="11.5" text-anchor="middle" fill="#232F3E">Origin, CloudFront</text>
+<text x="882.0" y="594" font-size="11.5" text-anchor="middle" fill="#232F3E">IPs only (internal ALB)</text>
+<rect x="980" y="380" width="48" height="48" rx="6" fill="#ED7100"/>
+<text x="1004.0" y="408.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">EC2</text>
+<text x="1004.0" y="444" font-size="11.5" text-anchor="middle" fill="#232F3E">t4g.large</text>
+<text x="1004.0" y="458" font-size="11.5" text-anchor="middle" fill="#232F3E">no public IP</text>
+<text x="1004.0" y="472" font-size="11.5" text-anchor="middle" fill="#232F3E">(EC2)</text>
+<rect x="1328" y="630" width="64" height="64" rx="6" fill="#8C4FFF"/>
+<text x="1360.0" y="666.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">VPCE</text>
+<rect x="1055" y="380" width="235" height="34" rx="5" fill="#FFFFFF" stroke="#ED7100"/>
+<text x="1172.5" y="401.0" font-size="11.5" text-anchor="middle" fill="#232F3E">Storefront + ~15 services</text>
+<rect x="1055" y="424" width="235" height="34" rx="5" fill="#FFFFFF" stroke="#ED7100"/>
+<text x="1172.5" y="445.0" font-size="11.5" text-anchor="middle" fill="#232F3E">Locust · flagd · Grafana</text>
+<rect x="1055" y="515" width="235" height="34" rx="5" fill="#FFF4E8" stroke="#ED7100"/>
+<text x="1172.5" y="536.0" font-size="11.5" text-anchor="middle" font-weight="bold" fill="#232F3E">Envoy :8080 (only open port)</text>
+<rect x="1055" y="645" width="235" height="34" rx="5" fill="#FFF4E8" stroke="#ED7100"/>
+<text x="1172.5" y="666.0" font-size="11.5" text-anchor="middle" font-weight="bold" fill="#232F3E">OTel Collector</text>
+<rect x="1055" y="720" width="235" height="44" rx="5" fill="#FFFFFF" stroke="#ED7100"/>
+<text x="1172.5" y="739.0" font-size="11.5" text-anchor="middle" fill="#232F3E">Jaeger · Prometheus · OpenSearch</text>
+<text x="1172.5" y="753.0" font-size="11.5" text-anchor="middle" fill="#232F3E">(on EBS, 60 days)</text>
+<rect x="1530" y="300" width="64" height="64" rx="6" fill="#E7157B"/>
+<text x="1562.0" y="336.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">SSM</text>
+<text x="1562.0" y="380" font-size="11.5" text-anchor="middle" fill="#232F3E">Settings + admin</text>
+<text x="1562.0" y="394" font-size="11.5" text-anchor="middle" fill="#232F3E">password</text>
+<text x="1562.0" y="408" font-size="11.5" text-anchor="middle" fill="#232F3E">(SSM Parameter Store)</text>
+<rect x="1530" y="630" width="64" height="64" rx="6" fill="#7AA116"/>
+<text x="1562.0" y="666.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">S3</text>
+<text x="1562.0" y="710" font-size="11.5" text-anchor="middle" fill="#232F3E">Telemetry archive</text>
+<text x="1562.0" y="724" font-size="11.5" text-anchor="middle" fill="#232F3E">OTLP JSON, 90 days</text>
+<text x="1562.0" y="738" font-size="11.5" text-anchor="middle" fill="#232F3E">(S3)</text>
+<rect x="660" y="900" width="64" height="64" rx="6" fill="#DD344C"/>
+<text x="692.0" y="936.0" font-size="10" font-weight="bold" text-anchor="middle" fill="#FFFFFF">Cognito</text>
+<text x="692.0" y="980" font-size="11.5" text-anchor="middle" fill="#232F3E">Admin users, login page</text>
+<text x="692.0" y="994" font-size="11.5" text-anchor="middle" fill="#232F3E">(Cognito)</text>
+<rect x="1103" y="990" width="64" height="64" rx="6" fill="#E7157B"/>
+<text x="1135.0" y="1026.0" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">SSM</text>
+<text x="1135.0" y="1070" font-size="11.5" text-anchor="middle" fill="#232F3E">Shell or tunnel</text>
+<text x="1135.0" y="1084" font-size="11.5" text-anchor="middle" fill="#232F3E">(Session Manager)</text>
+<rect x="203" y="523" width="42" height="17" fill="#FFFFFF"/>
+<text x="224" y="536" font-size="11" text-anchor="middle" fill="#232F3E">HTTPS</text>
+<rect x="203" y="641" width="42" height="17" fill="#FFFFFF"/>
+<text x="224" y="654" font-size="11" text-anchor="middle" fill="#232F3E">HTTPS</text>
+<rect x="315" y="419" width="79" height="17" fill="#FFFFFF"/>
+<text x="355" y="432" font-size="11" text-anchor="middle" fill="#232F3E">other paths</text>
+<rect x="315" y="723" width="79" height="17" fill="#FFFFFF"/>
+<text x="355" y="736" font-size="11" text-anchor="middle" fill="#232F3E">admin paths</text>
+<rect x="481" y="923" width="86" height="17" fill="#FFFFFF"/>
+<text x="524" y="936" font-size="11" text-anchor="middle" fill="#232F3E">verify login</text>
+<rect x="582" y="523" width="73" height="17" fill="#FFFFFF"/>
+<text x="618" y="536" font-size="11" text-anchor="middle" fill="#232F3E">VPC origin</text>
+<rect x="948" y="523" width="73" height="17" fill="#FFFFFF"/>
+<text x="984" y="536" font-size="11" text-anchor="middle" fill="#232F3E">HTTP :8080</text>
+<rect x="1428" y="653" width="67" height="17" fill="#FFFFFF"/>
+<text x="1461" y="666" font-size="11" text-anchor="middle" fill="#232F3E">PutObject</text>
+<rect x="1149" y="690" width="48" height="17" fill="#FFFFFF"/>
+<text x="1172" y="704" font-size="11" text-anchor="middle" fill="#232F3E">export</text>
+<rect x="1322" y="370" width="86" height="17" fill="#FFFFFF"/>
+<text x="1365" y="384" font-size="11" text-anchor="middle" fill="#232F3E">read at boot</text>
+<rect x="901" y="395" width="60" height="17" fill="#FFFFFF"/>
+<text x="931" y="408" font-size="11" text-anchor="middle" fill="#232F3E">outbound</text>
+<rect x="712" y="208" width="79" height="17" fill="#FFFFFF"/>
+<text x="752" y="220" font-size="11" text-anchor="middle" fill="#232F3E">clone, pull</text>
+<rect x="546" y="1013" width="136" height="17" fill="#FFFFFF"/>
+<text x="614" y="1026" font-size="11" text-anchor="middle" fill="#232F3E">tunnel.sh (optional)</text>
+<circle cx="212" cy="516" r="12" fill="#232F3E"/>
+<text x="212" y="520" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">1</text>
+<circle cx="612" cy="516" r="12" fill="#232F3E"/>
+<text x="612" y="520" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">2</text>
+<circle cx="937" cy="516" r="12" fill="#232F3E"/>
+<text x="937" y="520" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">3</text>
+<circle cx="352" cy="842" r="12" fill="#232F3E"/>
+<text x="352" y="846" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">4</text>
+<circle cx="1432" cy="640" r="12" fill="#232F3E"/>
+<text x="1432" y="644" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">5</text>
+<circle cx="1472" cy="308" r="12" fill="#232F3E"/>
+<text x="1472" y="312" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">6</text>
+<rect x="170" y="1140" width="1520" height="120" fill="#FFFFFF" stroke="#879196"/>
+<text x="184" y="1162" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">1</tspan>  Shoppers open the store over HTTPS. CloudFront is the only public entry point.</text>
+<text x="184" y="1178" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">2</tspan>  CloudFront reaches the internal ALB through a VPC origin; the ALB accepts CloudFront IP ranges only.</text>
+<text x="184" y="1194" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">3</tspan>  The ALB forwards to Envoy on the instance, which routes to the storefront, services and tools.</text>
+<text x="184" y="1210" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">4</tspan>  Admin paths (/grafana /jaeger /feature /loadgen /telemetry) go through Lambda@Edge, which requires a Cognito login. Other spellings and /opamp get 403.</text>
+<text x="184" y="1226" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">5</tspan>  The OTel Collector keeps 60 days on disk (Jaeger, Prometheus, OpenSearch) and archives everything to S3 through a gateway endpoint.</text>
+<text x="184" y="1242" font-size="12.5" fill="#232F3E"><tspan font-weight="bold">6</tspan>  At boot the instance reads its settings from Parameter Store and clones your fork through the NAT Gateway. No inbound access, no SSH.</text>
+<text x="1706" y="1274" font-size="10" text-anchor="end" fill="#879196">Preview rendered from the layout in generate_diagram.py; architecture.drawio has the AWS icons.</text>
+</svg>

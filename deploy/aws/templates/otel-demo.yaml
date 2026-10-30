@@ -1,0 +1,628 @@
+# SPDX-License-Identifier: Apache-2.0
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  otel-demo - OpenTelemetry Astronomy Shop (core + observability, Docker Compose) on a
+  private EC2 instance behind an internal ALB, reachable only through CloudFront (VPC
+  origin). The storefront is public; the admin UIs (Grafana, Jaeger, flagd, Locust,
+  telemetry docs) require a Cognito login enforced by Lambda@Edge. Telemetry is kept
+  on disk for LocalRetentionDays and archived to S3. Must be deployed in us-east-1.
+  Deploy with deploy/aws/scripts/deploy.sh, not by hand.
+
+Parameters:
+  EnvName:
+    Type: String
+    AllowedPattern: "^[a-z][a-z0-9-]{1,14}$"
+    Description: Short environment name (dev, demo, ...). Prefixes resource names.
+  RepoUrl:
+    Type: String
+    AllowedPattern: "^https://[A-Za-z0-9._/-]+$"
+    Description: >
+      Public HTTPS URL of the repository the instance clones. deploy.sh fills it in from
+      the local checkout's git remote.
+  RepoRef:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9._/-]+$"
+    Description: Branch or tag the instance clones. deploy.sh uses the current branch.
+  DemoVersion:
+    Type: String
+    Default: 3.1.0
+    Description: Image tag on ghcr.io/open-telemetry/demo. Must match the code RepoRef is based on.
+  InstanceType:
+    Type: String
+    Default: t4g.large
+    Description: Graviton (arm64) type with >= 8 GiB; core + observability limits total ~7.3 GiB.
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: >
+      Amazon Linux 2023 arm64 AMI. deploy.sh resolves the latest one on the first deploy and
+      reuses it afterwards, because a new AMI ID replaces the instance (and its on-disk data).
+  ComposeVersion:
+    Type: String
+    Default: v2.32.4
+    Description: Docker Compose plugin release (>= 2.24 for the !reset / !override tags).
+  RootVolumeGiB:
+    Type: Number
+    Default: 150
+    MinValue: 40
+  LocalRetentionDays:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    Description: Days kept on the instance by Jaeger (Badger), Prometheus and OpenSearch.
+  S3RetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+    Description: Lifecycle expiry for the raw OTLP archive in S3.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet::Id
+    Description: Must be in a different AZ than PrivateSubnetA (ALB requirement).
+  CloudFrontPrefixList:
+    Type: String
+    Description: ID of com.amazonaws.global.cloudfront.origin-facing in this region (deploy.sh looks it up).
+  PublicDomain:
+    Type: String
+    Default: ""
+    Description: >
+      The distribution's own domain. Empty on the first deploy; deploy.sh fills it in on a
+      second pass so the Cognito callback URL can point at it without a circular reference.
+  AdminEmail:
+    Type: String
+    Default: admin@example.com
+    Description: Admin login name. Never verified and never mailed, so a fake address is fine.
+
+Conditions:
+  HasPublicDomain: !Not [!Equals [!Ref PublicDomain, ""]]
+
+Resources:
+  # ---------- Telemetry archive (S3) ----------
+  # Private, SSE-S3, TLS-only, all four Block Public Access settings on.
+  # Retained on stack deletion so the archive outlives the environment.
+  TelemetryBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub astronomy-shop-${EnvName}-${AWS::AccountId}
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-raw-otlp
+            Status: Enabled
+            ExpirationInDays: !Ref S3RetentionDays
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }
+  TelemetryBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TelemetryBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt TelemetryBucket.Arn, !Sub "${TelemetryBucket.Arn}/*"]
+            Condition: { Bool: { aws:SecureTransport: "false" } }
+
+  # ---------- Security groups ----------
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${EnvName} otel-demo ALB - HTTP from CloudFront origin-facing IPs only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixList
+      SecurityGroupEgress:   # inline => replaces the default allow-all egress
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          DestinationSecurityGroupId: !Ref InstanceSg
+      Tags: [{ Key: Name, Value: !Sub "${EnvName}-otel-alb" }]
+  InstanceSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${EnvName} otel-demo instance - envoy 8080 from the ALB only, no SSH
+      VpcId: !Ref VpcId
+      Tags: [{ Key: Name, Value: !Sub "${EnvName}-otel-instance" }]
+  InstanceFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref InstanceSg
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref AlbSg
+
+  # ---------- Instance ----------
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: otel-demo-instance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvName}/otel-demo/app-url
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvName}/otel-demo/config
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${TelemetryBucket.Arn}/*
+  Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref Role] }
+
+  # Instance settings live here, not in UserData: EC2 does not re-run UserData when it
+  # changes. bootstrap.sh reads this at first boot and whenever apply-config.sh runs it.
+  ConfigParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${EnvName}/otel-demo/config
+      Type: String
+      Value: !Sub >-
+        {"repoUrl":"${RepoUrl}","repoRef":"${RepoRef}","demoVersion":"${DemoVersion}",
+        "composeVersion":"${ComposeVersion}","telemetryBucket":"${TelemetryBucket}",
+        "localRetentionDays":"${LocalRetentionDays}"}
+
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: ConfigParam
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref Profile
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroupIds: [!Ref InstanceSg]
+      MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 2 }   # hop 2: containers use the role
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: !Ref RootVolumeGiB, VolumeType: gp3, Encrypted: true }
+      Tags: [{ Key: Name, Value: !Sub "${EnvName}-otel-demo" }]
+      # Static on purpose (only EnvName and region): everything else comes from ConfigParam.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > >(tee -a /var/log/otel-demo-setup.log) 2>&1
+          printf 'ENV_NAME=%s\nAWS_REGION=%s\n' '${EnvName}' '${AWS::Region}' > /etc/otel-demo.env
+          dnf install -y git
+          CFG=$(aws ssm get-parameter --region '${AWS::Region}' --name '/${EnvName}/otel-demo/config' \
+                  --query Parameter.Value --output text)
+          get() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "$CFG" "$1"; }
+          [ -d /opt/otel-demo ] || git clone --depth 1 --branch "$(get repoRef)" "$(get repoUrl)" /opt/otel-demo
+          bash /opt/otel-demo/deploy/aws/scripts/bootstrap.sh
+
+  # ---------- Internal ALB ----------
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvName}-otel-internal
+      Scheme: internal
+      Type: application
+      Subnets: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroups: [!Ref AlbSg]
+      LoadBalancerAttributes:
+        - { Key: routing.http.drop_invalid_header_fields.enabled, Value: "true" }
+        - { Key: idle_timeout.timeout_seconds, Value: "120" }
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8080
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      Matcher: { HttpCode: "200-399" }
+      Targets: [{ Id: !Ref Instance, Port: 8080 }]
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref TargetGroup }]
+
+  # ---------- Admin login (Cognito + Lambda@Edge) ----------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${EnvName}-otel-demo-admin
+      UsernameAttributes: [email]
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: true }   # no self sign-up
+      AccountRecoverySetting:                                     # fake email => no self-service reset
+        RecoveryMechanisms: [{ Name: admin_only, Priority: 1 }]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 16
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub ${EnvName}-otel-${AWS::AccountId}
+      ManagedLoginVersion: 1          # classic hosted UI, no branding resource needed
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub ${EnvName}-otel-edge
+      GenerateSecret: false           # public client + PKCE; no secret to embed at the edge
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email]
+      SupportedIdentityProviders: [COGNITO]
+      # Placeholder on the first pass; deploy.sh's second pass sets the real domain.
+      CallbackURLs:
+        - !If [HasPublicDomain, !Sub "https://${PublicDomain}/_auth/callback", "https://example.com/_auth/callback"]
+      LogoutURLs:
+        - !If [HasPublicDomain, !Sub "https://${PublicDomain}/", "https://example.com/"]
+      ExplicitAuthFlows: [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      IdTokenValidity: 12
+      AccessTokenValidity: 12
+      TokenValidityUnits: { IdToken: hours, AccessToken: hours }
+  AdminUser:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPool
+      Username: !Ref AdminEmail
+      MessageAction: SUPPRESS         # never send mail to the fake address
+      UserAttributes:
+        - { Name: email, Value: !Ref AdminEmail }
+        - { Name: email_verified, Value: "true" }
+
+  # Generates a random permanent password inside AWS and stores it only in SSM.
+  # Uses urllib instead of cfnresponse: cfnresponse is not on the python3.12 runtime.
+  AdminPasswordRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+      Policies:
+        - PolicyName: set-admin-password
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cognito-idp:AdminSetUserPassword
+                Resource: !GetAtt UserPool.Arn
+              - Effect: Allow
+                Action: [ssm:GetParameter, ssm:PutParameter, ssm:DeleteParameter]
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvName}/otel-demo/admin-password
+  AdminPasswordFn:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      Role: !GetAtt AdminPasswordRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, json, secrets, string, urllib.request
+          def send(e, c, status):
+              body = json.dumps({'Status': status, 'Reason': 'See ' + c.log_stream_name,
+                                 'PhysicalResourceId': 'otel-demo-admin-password', 'StackId': e['StackId'],
+                                 'RequestId': e['RequestId'], 'LogicalResourceId': e['LogicalResourceId'], 'Data': {}}).encode()
+              req = urllib.request.Request(e['ResponseURL'], data=body, method='PUT',
+                                           headers={'Content-Type': '', 'Content-Length': str(len(body))})
+              urllib.request.urlopen(req, timeout=10)
+          def handler(e, c):
+              try:
+                  p = e['ResourceProperties']; ssm = boto3.client('ssm')
+                  if e['RequestType'] == 'Delete':
+                      try: ssm.delete_parameter(Name=p['Param'])
+                      except Exception: pass
+                  else:
+                      try: ssm.get_parameter(Name=p['Param']); exists = True
+                      except ssm.exceptions.ParameterNotFound: exists = False
+                      old_user = e.get('OldResourceProperties', {}).get('User')
+                      if e['RequestType'] == 'Create' or not exists or old_user != p['User']:
+                          r = secrets.SystemRandom()
+                          pw = [r.choice(string.ascii_uppercase), r.choice(string.ascii_lowercase), r.choice(string.digits)]
+                          pw += [r.choice(string.ascii_letters + string.digits) for _ in range(21)]
+                          r.shuffle(pw); pw = ''.join(pw)
+                          boto3.client('cognito-idp').admin_set_user_password(
+                              UserPoolId=p['Pool'], Username=p['User'], Password=pw, Permanent=True)
+                          ssm.put_parameter(Name=p['Param'], Value=pw, Type='SecureString', Overwrite=True)
+                  send(e, c, 'SUCCESS')
+              except Exception as x:
+                  print(type(x).__name__)
+                  send(e, c, 'FAILED')
+  AdminPassword:
+    Type: Custom::AdminPassword
+    DependsOn: AdminUser
+    Properties:
+      ServiceToken: !GetAtt AdminPasswordFn.Arn
+      ServiceTimeout: 120             # fail in 2 min instead of the 1 h default if the function never answers
+      Pool: !Ref UserPool
+      User: !Ref AdminEmail
+      Param: !Sub /${EnvName}/otel-demo/admin-password
+
+  # Lambda@Edge viewer-request on the admin paths: valid Cognito ID-token cookie => pass;
+  # otherwise redirect to the hosted login (code flow + PKCE + state). Lambda@Edge allows
+  # no env vars, so config is baked in with !Sub. The site URL comes from the Host header,
+  # so this code does not depend on the distribution (no circular reference); Cognito
+  # still rejects any redirect_uri that is not the registered callback.
+  # Retained on stack deletion: edge replicas block deletion for hours. destroy.sh
+  # --cleanup-edge removes it later.
+  AdminAuthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [lambda.amazonaws.com, edgelambda.amazonaws.com] }
+            Action: sts:AssumeRole
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole]
+  AdminAuthFn:
+    Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      FunctionName: !Sub ${EnvName}-otel-admin-auth
+      Runtime: nodejs22.x
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt AdminAuthRole.Arn
+      Code:
+        ZipFile: !Sub |
+          'use strict';
+          const https = require('https'), crypto = require('crypto');
+          const ISS = 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}';
+          const CLIENT = '${UserPoolClient}';
+          const AUTH = 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com';
+          const CK = '; Path=/; Secure; HttpOnly; SameSite=Lax';
+          let keys;
+          function call(url, opt, body) {
+            return new Promise((res, rej) => {
+              const r = https.request(url, opt || {}, s => { let d = ''; s.on('data', c => d += c); s.on('end', () => res({ status: s.statusCode, body: d })); });
+              r.on('error', rej); r.setTimeout(3000, () => r.destroy(new Error('timeout')));
+              if (body) r.write(body); r.end();
+            });
+          }
+          async function jwks() {
+            if (!keys) {
+              const r = await call(ISS + '/.well-known/jwks.json'); const k = {};
+              JSON.parse(r.body).keys.forEach(j => { k[j.kid] = crypto.createPublicKey({ key: j, format: 'jwk' }); });
+              keys = k;
+            }
+            return keys;
+          }
+          const b64 = s => Buffer.from(s, 'base64url');
+          async function valid(t) {
+            try {
+              const [h, p, s] = t.split('.'); const hd = JSON.parse(b64(h));
+              const key = (await jwks())[hd.kid];
+              if (!key || hd.alg !== 'RS256') return false;
+              if (!crypto.verify('RSA-SHA256', Buffer.from(h + '.' + p), key, b64(s))) return false;
+              const c = JSON.parse(b64(p));
+              return c.iss === ISS && c.aud === CLIENT && c.token_use === 'id' && c.exp * 1000 > Date.now();
+            } catch (e) { return false; }
+          }
+          function cookies(req) {
+            const o = {};
+            (req.headers.cookie || []).forEach(h => h.value.split(';').forEach(x => { const i = x.indexOf('='); if (i > 0) o[x.slice(0, i).trim()] = x.slice(i + 1).trim(); }));
+            return o;
+          }
+          function redirect(loc, set) {
+            const r = { status: '302', headers: { location: [{ value: loc }], 'cache-control': [{ value: 'no-store' }] } };
+            if (set) r.headers['set-cookie'] = set.map(v => ({ value: v }));
+            return r;
+          }
+          const deny = m => ({ status: '403', statusDescription: 'Forbidden', body: m });
+          exports.handler = async (event) => {
+            const req = event.Records[0].cf.request, ck = cookies(req);
+            const SITE = 'https://' + req.headers.host[0].value, CB = SITE + '/_auth/callback';
+            if (req.uri === '/_auth/logout')
+              return redirect(AUTH + '/logout?client_id=' + CLIENT + '&logout_uri=' + encodeURIComponent(SITE + '/'), ['otel_id=; Max-Age=0' + CK]);
+            if (req.uri === '/_auth/callback') {
+              const q = new URLSearchParams(req.querystring), st = (ck.otel_st || '').split('|');
+              if (!q.get('code') || !st[0] || q.get('state') !== st[0]) return deny('Login state mismatch, retry');
+              const r = await call(AUTH + '/oauth2/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' } },
+                new URLSearchParams({ grant_type: 'authorization_code', client_id: CLIENT, code: q.get('code'), redirect_uri: CB, code_verifier: st[1] }).toString());
+              const t = r.status === 200 ? JSON.parse(r.body).id_token : '';
+              if (!(await valid(t))) return deny('Login failed');
+              let back = decodeURIComponent(st[2] || ''); if (!/^\/[a-z]/.test(back)) back = '/grafana/';
+              return redirect(SITE + back, ['otel_id=' + t + '; Max-Age=43200' + CK, 'otel_st=; Max-Age=0' + CK]);
+            }
+            if (ck.otel_id && await valid(ck.otel_id)) return req;
+            const state = crypto.randomBytes(16).toString('hex'), ver = crypto.randomBytes(32).toString('base64url');
+            const back = req.uri + (req.querystring ? '?' + req.querystring : '');
+            const qs = new URLSearchParams({ response_type: 'code', client_id: CLIENT, redirect_uri: CB, scope: 'openid email', state: state,
+              code_challenge: crypto.createHash('sha256').update(ver).digest('base64url'), code_challenge_method: 'S256' });
+            return redirect(AUTH + '/oauth2/authorize?' + qs, ['otel_st=' + state + '|' + ver + '|' + encodeURIComponent(back) + '; Max-Age=600' + CK]);
+          };
+  AdminAuthVersion:
+    Type: AWS::Lambda::Version
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      FunctionName: !Ref AdminAuthFn
+
+  # ---------- CloudFront ----------
+  # Envoy routes these prefixes to UIs that have no login of their own. Any spelling
+  # that does not hit an exact-case login behavior below (//Grafana, %67rafana, ...)
+  # falls to the default behavior and is denied here. /otlp-http/ and /flagservice/
+  # stay open because the storefront's browser code calls them.
+  AdminBlockFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${EnvName}-otel-block-admin
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Block unauthenticated admin UIs on the public storefront
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        var BLOCKED = ['/loadgen', '/jaeger', '/grafana', '/opamp', '/feature',
+                       '/profiles', '/chatbot', '/telemetry', '/_auth'];
+        function deny() {
+          return { statusCode: 403, statusDescription: 'Forbidden',
+                   headers: { 'content-type': { value: 'text/plain' } },
+                   body: { encoding: 'text', data: 'Forbidden' } };
+        }
+        function handler(event) {
+          var uri;
+          try { uri = decodeURIComponent(event.request.uri); } catch (e) { return deny(); }
+          uri = uri.replace(/\/+/g, '/').toLowerCase();
+          for (var i = 0; i < BLOCKED.length; i++) {
+            if (uri.indexOf(BLOCKED[i]) === 0) { return deny(); }
+          }
+          return event.request;
+        }
+  VpcOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    DependsOn: Listener
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: !Sub ${EnvName}-otel-alb
+        Arn: !Ref Alb
+        HTTPPort: 80
+        HTTPSPort: 443
+        OriginProtocolPolicy: http-only
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${EnvName} otel-demo
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: alb
+            DomainName: !GetAtt Alb.DNSName
+            VpcOriginConfig:
+              VpcOriginId: !GetAtt VpcOrigin.Id
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: alb
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # Managed-CachingDisabled
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3  # Managed-AllViewer
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt AdminBlockFunction.FunctionMetadata.FunctionARN
+        # Exact-case admin prefixes go through the Cognito login.
+        CacheBehaviors:
+          - PathPattern: "/_auth/*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+          - PathPattern: "/feature*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+          - PathPattern: "/grafana*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+          - PathPattern: "/jaeger*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+          - PathPattern: "/loadgen*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+          - PathPattern: "/telemetry*"
+            TargetOriginId: alb
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            LambdaFunctionAssociations:
+              - { EventType: viewer-request, LambdaFunctionARN: !Ref AdminAuthVersion }
+
+  # The instance waits for this parameter before starting, so browser spans are sent
+  # to the public URL instead of each visitor's own localhost.
+  AppUrlParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${EnvName}/otel-demo/app-url
+      Type: String
+      Value: !Sub https://${Distribution.DomainName}
+
+Outputs:
+  StoreUrl:
+    Value: !Sub https://${Distribution.DomainName}/
+  DistributionDomain:
+    Value: !GetAtt Distribution.DomainName
+  PublicDomainParameter:
+    Description: deploy.sh compares this with DistributionDomain to decide on the second pass
+    Value: !Ref PublicDomain
+  InstanceId:
+    Value: !Ref Instance
+  TelemetryBucketName:
+    Value: !Ref TelemetryBucket
+  AdminLogin:
+    Value: !Ref AdminEmail
+  UserPoolId:
+    Description: Cognito user pool for the admin login (scripts/users.sh manages its users)
+    Value: !Ref UserPool
+  AdminPasswordParameter:
+    Value: !Sub /${EnvName}/otel-demo/admin-password
+  AdminAuthFunctionName:
+    Value: !Ref AdminAuthFn

@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# AWS overlay for the core + observability stack. Loaded last by bootstrap.sh:
+#   docker compose -f compose.yaml -f compose.observability.yaml -f compose.extras.yaml \
+#                  -f deploy/aws/config/compose.aws.yaml
+# Relative paths resolve from the repo root (the directory of the first -f file).
+# Values like ${LOCAL_RETENTION_DAYS} come from .env.override, which bootstrap.sh writes.
+#
+# 1. Ports: the stock files publish ~25 host ports on all interfaces. Only Envoy 8080 is
+#    published here (the security group limits it to the ALB); everything else talks over
+#    the compose network. The Envoy admin port 10000 is dropped.
+# 2. Storage: Jaeger uses Badger on disk instead of the 25,000-trace memory store;
+#    Prometheus and OpenSearch keep their data on named volumes.
+# 3. S3 archive: the Collector also loads otelcol-config-aws.yml.
+
+services:
+  frontend-proxy:
+    ports: !override
+      - "8080:8080"
+
+  jaeger:
+    ports: !reset []
+    command: !override
+      - "--config=file:/etc/jaeger/config.yml"
+      - "--config=file:/etc/jaeger/badger.yml"
+    environment:
+      - BADGER_SPAN_TTL=${BADGER_SPAN_TTL:?set in .env.override}
+    volumes:
+      - ./deploy/aws/config/jaeger-badger.yml:/etc/jaeger/badger.yml:ro
+      - /var/lib/otel-demo/jaeger:/badger
+
+  prometheus:
+    ports: !reset []
+    command: !override
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --storage.tsdb.retention.time=${LOCAL_RETENTION_DAYS:?set in .env.override}d
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-20GB}
+      - --config.file=/etc/prometheus/prometheus-config.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.route-prefix=/
+      - --web.enable-otlp-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+  opensearch:
+    ports: !reset []
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+  otel-collector:
+    ports: !reset []
+    command: !override
+      - "--config=/etc/otelcol-config.yml"
+      - "--config=/etc/otelcol-config-full.yml"
+      - "--config=/etc/otelcol-config-observability.yml"
+      - "--config=/etc/otelcol-config-extras.yml"
+      - "--config=/etc/otelcol-config-aws.yml"
+      - "--feature-gates=service.profilesSupport"
+    environment:
+      - TELEMETRY_BUCKET=${TELEMETRY_BUCKET:?set in .env.override}
+      - AWS_REGION=${AWS_REGION:?set in .env.override}
+    volumes:
+      - ./deploy/aws/config/otelcol-config-aws.yml:/etc/otelcol-config-aws.yml:ro
+
+  ad:
+    ports: !reset []
+  cart:
+    ports: !reset []
+  checkout:
+    ports: !reset []
+  currency:
+    ports: !reset []
+  email:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  image-provider:
+    ports: !reset []
+  load-generator:
+    ports: !reset []
+  payment:
+    ports: !reset []
+  product-catalog:
+    ports: !reset []
+  quote:
+    ports: !reset []
+  recommendation:
+    ports: !reset []
+  shipping:
+    ports: !reset []
+  flagd:
+    ports: !reset []
+  flagd-ui:
+    ports: !reset []
+  telemetry-docs:
+    ports: !reset []
+  astronomy-db:
+    ports: !reset []
+  valkey-cart:
+    ports: !reset []
+  grafana:
+    ports: !reset []
+
+volumes:
+  prometheus-data:
+  opensearch-data:
