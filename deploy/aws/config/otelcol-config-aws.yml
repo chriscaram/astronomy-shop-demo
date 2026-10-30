@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Loaded after otelcol-config-extras.yml. Archives every trace, metric and log to S3 as
+# gzipped OTLP JSON under s3://$TELEMETRY_BUCKET/{traces,metrics,logs}/year=/month=/day=/hour=/minute=/.
+# Credentials come from the EC2 instance role through IMDSv2 (hop limit 2).
+#
+# The Collector replaces pipeline exporter lists instead of appending to them, so the
+# upstream exporters from otelcol-config-observability.yml are repeated here.
+# Batches flush about once a minute to keep S3 PUT requests (and cost) low.
+
+exporters:
+  awss3/traces:
+    s3uploader:
+      region: ${env:AWS_REGION}
+      s3_bucket: ${env:TELEMETRY_BUCKET}
+      s3_prefix: traces
+      s3_partition_timezone: UTC
+      compression: gzip
+    marshaler: otlp_json
+    timeout: 30s
+    sending_queue:
+      enabled: true
+      sizer: items
+      queue_size: 500000
+      batch:
+        flush_timeout: 60s
+        min_size: 200000
+        max_size: 400000
+  awss3/metrics:
+    s3uploader:
+      region: ${env:AWS_REGION}
+      s3_bucket: ${env:TELEMETRY_BUCKET}
+      s3_prefix: metrics
+      s3_partition_timezone: UTC
+      compression: gzip
+    marshaler: otlp_json
+    timeout: 30s
+    sending_queue:
+      enabled: true
+      sizer: items
+      queue_size: 500000
+      batch:
+        flush_timeout: 60s
+        min_size: 200000
+        max_size: 400000
+  awss3/logs:
+    s3uploader:
+      region: ${env:AWS_REGION}
+      s3_bucket: ${env:TELEMETRY_BUCKET}
+      s3_prefix: logs
+      s3_partition_timezone: UTC
+      compression: gzip
+    marshaler: otlp_json
+    timeout: 30s
+    sending_queue:
+      enabled: true
+      sizer: items
+      queue_size: 500000
+      batch:
+        flush_timeout: 60s
+        min_size: 200000
+        max_size: 400000
+
+service:
+  pipelines:
+    traces:
+      exporters: [debug, otlp_grpc/jaeger, span_metrics, awss3/traces]
+    metrics:
+      exporters: [debug, otlp_http/prometheus, awss3/metrics]
+    logs:
+      exporters: [debug, opensearch, awss3/logs]
