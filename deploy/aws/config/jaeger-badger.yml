@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Merged on top of src/jaeger/config.yml (second --config flag). Switches trace storage
+# from the in-memory store (capped by MEMORY_MAX_TRACES) to Badger on disk. The host
+# directory /var/lib/otel-demo/jaeger is mounted at /badger and owned by uid 10001.
+# Spans expire after BADGER_SPAN_TTL (bootstrap.sh sets it to LOCAL_RETENTION_DAYS * 24h).
+
+extensions:
+  jaeger_query:
+    storage:
+      traces: badger_store
+  jaeger_storage:
+    backends:
+      badger_store:
+        badger:
+          directories:
+            keys: /badger/keys
+            values: /badger/values
+          ephemeral: false
+          ttl:
+            spans: ${env:BADGER_SPAN_TTL}
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: badger_store
